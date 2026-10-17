@@ -9,14 +9,18 @@ import { useConnected } from "./use-connected"
 import { useData } from "../context/data"
 import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
+import { useConfig } from "../config"
+import { ModelCost } from "../util/model-cost"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const data = useData()
   const dialog = useDialog()
   const location = useLocation()
+  const config = useConfig().data
   const [query, setQuery] = createSignal("")
   const favoritePriority = new Set(local.model.favorite().map(modelPreferenceKey))
+  const switchGuard = ModelCost.createSwitchGuard(config)
 
   const connected = useConnected()
   const providers = createMemo(
@@ -25,6 +29,12 @@ export function DialogModel(props: { providerID?: string }) {
   const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
   const showExtra = createMemo(() => connected() && !props.providerID)
+
+  const footerFor = (model: (typeof models extends () => infer T ? T : never)[number]) => {
+    const armed = switchGuard.armed() === modelPreferenceKey({ providerID: model.providerID, modelID: model.id })
+    if (armed) return ModelCost.armedLabel()
+    return ModelCost.label(model, config) ?? (ModelCost.isFree(model) ? "Free" : undefined)
+  }
 
   const options = createMemo(() => {
     const needle = query().trim()
@@ -37,6 +47,7 @@ export function DialogModel(props: { providerID?: string }) {
       return items.flatMap((item) => {
         const model = models().find((model) => model.providerID === item.providerID && model.id === item.modelID)
         if (!model) return []
+        if (!ModelCost.visible(model, config)) return []
         const provider = providers().get(model.providerID)
         return [
           {
@@ -46,7 +57,7 @@ export function DialogModel(props: { providerID?: string }) {
             releaseDate: model.time.released,
             description: provider?.name ?? model.providerID,
             category,
-            footer: free(model) ? "Free" : undefined,
+            footer: footerFor(model),
             onSelect: () => {
               onSelect(model.providerID, model.id)
             },
@@ -67,6 +78,8 @@ export function DialogModel(props: { providerID?: string }) {
       models()
         .filter((model) => model.status !== "deprecated")
         .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
+        // "Free only" leaves paid models out of the list entirely.
+        .filter((model) => ModelCost.visible(model, config))
         .map((model) => {
           const provider = providers().get(model.providerID)
           const key = modelPreferenceKey({ providerID: model.providerID, modelID: model.id })
@@ -79,7 +92,7 @@ export function DialogModel(props: { providerID?: string }) {
             releaseDate: model.time.released,
             description: favorite ? "(Favorite)" : undefined,
             category: connected() ? (provider?.name ?? model.providerID) : undefined,
-            footer: free(model) ? "Free" : undefined,
+            footer: footerFor(model),
             onSelect() {
               onSelect(model.providerID, model.id)
             },
@@ -124,6 +137,10 @@ export function DialogModel(props: { providerID?: string }) {
   })
 
   function onSelect(providerID: string, modelID: string) {
+    const model = models().find((item) => item.providerID === providerID && item.id === modelID)
+    // A paid model arms on the first Enter; only the second one within the window switches.
+    if (model && !switchGuard.guard(modelPreferenceKey({ providerID, modelID }), ModelCost.isPaid(model, config)))
+      return
     local.model.set({ providerID, modelID }, { recent: true })
     const list = local.model.variant.list()
     const cur = local.model.variant.current()
@@ -209,8 +226,4 @@ export function sortModelOptions<
 
     return a.title.localeCompare(b.title)
   })
-}
-
-function free(model: { cost: Array<{ input: number }> }) {
-  return model.cost.length > 0 && model.cost.every((cost) => cost.input === 0)
 }

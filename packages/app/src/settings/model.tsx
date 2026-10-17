@@ -19,6 +19,8 @@ export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
 
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
+export type ModelGuard = Settings["modelGuard"]
+
 export type NotificationSettings = Settings["notifications"]
 
 export type SoundSettings = Settings["sounds"]
@@ -124,6 +126,13 @@ const generalSchema = Persistence.struct({
   followUpBehavior: Schema.Literals(["queue", "steer"]),
 })
 
+const modelGuardSchema = Persistence.struct({
+  // Whether models with a non-zero price stay in the picker with a red warning or are hidden entirely.
+  paidVisibility: Schema.Literals(["warn", "hide"]),
+  // Whether a paid model needs a second click before it becomes the active model.
+  confirmPaidSwitch: Schema.Boolean,
+})
+
 const appearanceSchema = Persistence.struct({
   fontSize: Schema.Number,
   mono: Schema.String,
@@ -170,6 +179,7 @@ export const settingsSchema = Persistence.struct({
     Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
   ),
   appearance: appearanceSchema,
+  modelGuard: modelGuardSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   permissions: permissionsSchema,
   workspaces: workspacesSchema,
@@ -285,6 +295,7 @@ export const defaultSettings: Settings = {
     followUpBehavior: "steer",
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+  modelGuard: { paidVisibility: "warn", confirmPaidSwitch: true },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -400,6 +411,22 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+      },
+      modelGuard: {
+        paidVisibility: withFallback(
+          () => store.modelGuard?.paidVisibility,
+          defaultSettings.modelGuard.paidVisibility,
+        ),
+        setPaidVisibility(value: ModelGuard["paidVisibility"]) {
+          setStore("modelGuard", "paidVisibility", value)
+        },
+        confirmPaidSwitch: withFallback(
+          () => store.modelGuard?.confirmPaidSwitch,
+          defaultSettings.modelGuard.confirmPaidSwitch,
+        ),
+        setConfirmPaidSwitch(value: boolean) {
+          setStore("modelGuard", "confirmPaidSwitch", value)
         },
       },
       keybinds: {

@@ -247,6 +247,17 @@ export const Info = Schema.Struct({
   experimental: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
     description: "Experimental features that may change or be removed at any time",
   }),
+  model_guard: Schema.optional(
+    Schema.Struct({
+      paid_visibility: Schema.optional(Schema.Literals(["warn", "hide"])).annotate({
+        description:
+          "Whether models with a non-zero token price appear in the model dialog with a red warning and their price, or are hidden entirely",
+      }),
+      confirm_paid_switch: Schema.optional(Schema.Boolean).annotate({
+        description: "Require a second Enter on a paid model before it becomes active",
+      }),
+    }),
+  ).annotate({ description: "Paid model warnings and confirmations" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   highlights: Schema.optional(Schema.Boolean).annotate({
     description: "Show the release highlights once after OpenCode updates",
@@ -256,7 +267,10 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
+export type Resolved = Omit<
+  Info,
+  "attention" | "cursor" | "keybinds" | "leader" | "model_guard" | "mouse" | "session" | "tabs"
+> & {
   attention: {
     notifications: boolean
     sound: boolean
@@ -282,6 +296,10 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
     indicators: "status" | "numbers"
+  }
+  model_guard: {
+    paid_visibility: "warn" | "hide"
+    confirm_paid_switch: boolean
   }
 }
 
@@ -334,6 +352,10 @@ export function resolve(
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
+    },
+    model_guard: {
+      paid_visibility: input.model_guard?.paid_visibility ?? "warn",
+      confirm_paid_switch: input.model_guard?.confirm_paid_switch ?? true,
     },
   }
 }

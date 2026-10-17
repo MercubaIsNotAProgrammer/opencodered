@@ -23,6 +23,7 @@ import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
 import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
+import { createPaidSwitchGuard, formatModelCost, isFreeModel, useModelCostGuard } from "./cost"
 import { SettingsList } from "@/settings/list"
 import {
   CONSOLE_GROUP_KEY,
@@ -40,8 +41,8 @@ const MobilePanelDrawer = lazy(async () => {
   return { default: MobilePanelDrawer }
 })
 
-const isFree = (provider: string, cost: { input: number } | undefined) =>
-  provider === "opencode" && (!cost || cost.input === 0)
+// A model is free when every metered rate is zero; see ./cost for the full rule.
+const isFree = (model: ModelItem) => isFreeModel(model)
 
 type ModelState = ModelSelection
 
@@ -138,46 +139,63 @@ const ModelList: Component<{
     return (
       <SettingsList variant="catalog">
         <For each={props.items}>
-          {(item) => (
-            <button
-              type="button"
-              data-component="settings-row"
-              data-option-key={modelKey(item)}
-              aria-pressed={controller.current() === modelKey(item)}
-              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-              classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
-              onMouseEnter={() => setStore("active", modelKey(item))}
-              onMouseLeave={() => setStore("active", "")}
-              onClick={() => controller.select(item)}
-            >
-              <div data-slot="settings-row-copy">
-                <div data-slot="settings-row-title" class="flex items-center gap-2">
-                  <Tooltip
-                    inactive={props.mobile}
-                    placement="right-start"
-                    gutter={12}
-                    openDelay={0}
-                    value={
-                      <ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} v2 />
-                    }
-                  >
-                    <span class="min-w-0 truncate">{item.name}</span>
-                  </Tooltip>
-                  <Show when={isFree(item.provider.id, item.cost)}>
-                    <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
-                  </Show>
-                  <Show when={item.latest}>
-                    <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
+          {(item) => {
+            const free = isFree(item)
+            const cost = formatModelCost(item)
+            const armed = () => controller.armed() === modelKey(item)
+
+            return (
+              <button
+                type="button"
+                data-component="settings-row"
+                data-option-key={modelKey(item)}
+                data-model-paid={!free ? "" : undefined}
+                data-model-armed={armed() ? "" : undefined}
+                aria-pressed={controller.current() === modelKey(item)}
+                class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                classList={{
+                  "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item),
+                  "model-cost-armed": armed(),
+                }}
+                onMouseEnter={() => setStore("active", modelKey(item))}
+                onMouseLeave={() => setStore("active", "")}
+                onClick={() => controller.select(item)}
+              >
+                <div data-slot="settings-row-copy">
+                  <div data-slot="settings-row-title" class="flex items-center gap-2">
+                    <Tooltip
+                      inactive={props.mobile}
+                      placement="right-start"
+                      gutter={12}
+                      openDelay={0}
+                      value={<ModelTooltip model={item} latest={item.latest} free={free} v2 />}
+                    >
+                      <span class="min-w-0 truncate">{item.name}</span>
+                    </Tooltip>
+                    <Show when={free}>
+                      <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
+                    </Show>
+                    <Show when={cost}>
+                      <Badge class="model-cost-paid-tag shrink-0">
+                        {language.t("model.tag.paid")} · {cost()}
+                      </Badge>
+                    </Show>
+                    <Show when={armed()}>
+                      <Badge class="model-cost-armed-tag shrink-0">{language.t("model.tag.armed")}</Badge>
+                    </Show>
+                    <Show when={item.latest}>
+                      <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
+                    </Show>
+                  </div>
+                </div>
+                <div data-slot="settings-row-control" class="size-4">
+                  <Show when={controller.current() === modelKey(item)}>
+                    <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
                   </Show>
                 </div>
-              </div>
-              <div data-slot="settings-row-control" class="size-4">
-                <Show when={controller.current() === modelKey(item)}>
-                  <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-                </Show>
-              </div>
-            </button>
-          )}
+              </button>
+            )
+          }}
         </For>
       </SettingsList>
     )
@@ -306,6 +324,8 @@ export function ModelSelectorPopover(props: {
           current={controller.current()}
           chatgptPlan={chatgptPlan()}
           select={controller.select}
+          armed={controller.armed}
+          disarm={controller.disarm}
           onManage={manage}
           onClose={() => props.onClose?.()}
         />
@@ -454,16 +474,28 @@ function createModelSelectorController(input: {
   onSelect: () => void
 }) {
   const model = input.model ?? useLocal().model
+  const guard = useModelCostGuard()
+  const armed = createPaidSwitchGuard({ confirm: guard.confirmPaidSwitch })
 
   const allModels = createMemo(() =>
     model
       .list()
       .filter((item) => model.visible({ modelID: item.id, providerID: item.provider.id }))
-      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true))
+      // "Free only" hides paid models outright; "warn" keeps them listed with their price.
+      .filter(guard.show),
   )
 
   return {
-    all: () => model.list().filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+    all: () =>
+      model
+        .list()
+        .filter((item) => (input.provider() ? item.provider.id === input.provider() : true))
+        .filter(guard.show),
+    armed: armed.armed,
+    disarm: armed.disarm,
+    isFree,
+    cost: formatModelCost,
     models: (search: string) => {
       const query = search.trim()
 
@@ -488,6 +520,8 @@ function createModelSelectorController(input: {
       return value ? modelKey(value) : undefined
     },
     select: (item: ModelItem) => {
+      // A paid model is armed by the first click; only the second one within the window switches.
+      if (!armed.guard(modelKey(item), !isFree(item))) return
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
       input.onSelect()
     },
@@ -502,6 +536,8 @@ export function ModelSelectorPopoverView(props: {
   current: string | undefined
   chatgptPlan?: boolean
   select: (item: ModelItem) => void
+  armed: () => string | undefined
+  disarm: () => void
   onManage: () => void
   onClose: () => void
 }) {
@@ -562,6 +598,7 @@ export function ModelSelectorPopoverView(props: {
   const selectModel = (item: ModelItem) => {
     dismiss.preventTriggerRestore()
     setOpen(false)
+    props.disarm()
     dismiss.afterClose(() => props.select(item))
   }
 
@@ -718,43 +755,57 @@ export function ModelSelectorPopoverView(props: {
                       </Menu.GroupLabel>
                       <Menu.RadioGroup value={props.current}>
                         <For each={group.items}>
-                          {(item) => (
-                            <Tooltip
-                              class="w-full"
-                              placement="right-start"
-                              gutter={6}
-                              openDelay={0}
-                              value={
-                                <ModelTooltip
-                                  model={item}
-                                  latest={item.latest}
-                                  free={isFree(item.provider.id, item.cost)}
-                                  v2
-                                />
-                              }
-                            >
-                              <Menu.RadioItem
-                                value={modelKey(item)}
-                                data-option-key={modelKey(item)}
-                                data-selected-model={props.current === modelKey(item) ? true : undefined}
-                                class="scroll-my-6 w-full"
-                                classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
-                                onMouseEnter={() => {
-                                  setStore("active", modelKey(item))
-                                  setTimeout(() => searchRef?.focus())
-                                }}
-                                onSelect={() => selectModel(item)}
+                          {(item) => {
+                            const free = isFree(item)
+                            const cost = formatModelCost(item)
+                            const armed = () => props.armed() === modelKey(item)
+
+                            return (
+                              <Tooltip
+                                class="w-full"
+                                placement="right-start"
+                                gutter={6}
+                                openDelay={0}
+                                value={<ModelTooltip model={item} latest={item.latest} free={free} v2 />}
                               >
-                                <span class="min-w-0 truncate leading-5">{item.name}</span>
-                                <Show when={isFree(item.provider.id, item.cost)}>
-                                  <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
-                                </Show>
-                                <Show when={item.latest}>
-                                  <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
-                                </Show>
-                              </Menu.RadioItem>
-                            </Tooltip>
-                          )}
+                                <Menu.RadioItem
+                                  value={modelKey(item)}
+                                  data-option-key={modelKey(item)}
+                                  data-selected-model={props.current === modelKey(item) ? true : undefined}
+                                  data-model-paid={!free ? "" : undefined}
+                                  data-model-armed={armed() ? "" : undefined}
+                                  class="scroll-my-6 w-full"
+                                  classList={{
+                                    "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item),
+                                    "model-cost-armed": armed(),
+                                  }}
+                                  onMouseEnter={() => {
+                                    setStore("active", modelKey(item))
+                                    setTimeout(() => searchRef?.focus())
+                                  }}
+                                  onSelect={() => selectModel(item)}
+                                >
+                                  <span class="min-w-0 truncate leading-5">{item.name}</span>
+                                  <Show when={free}>
+                                    <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
+                                  </Show>
+                                  <Show when={cost}>
+                                    <Badge class="model-cost-paid-tag shrink-0">
+                                      {language.t("model.tag.paid")} · {cost()}
+                                    </Badge>
+                                  </Show>
+                                  <Show when={armed()}>
+                                    <Badge class="model-cost-armed-tag shrink-0">
+                                      {language.t("model.tag.armed")}
+                                    </Badge>
+                                  </Show>
+                                  <Show when={item.latest}>
+                                    <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
+                                  </Show>
+                                </Menu.RadioItem>
+                              </Tooltip>
+                            )
+                          }}
                         </For>
                       </Menu.RadioGroup>
                     </Menu.Group>

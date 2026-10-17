@@ -8,6 +8,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { ExtensionSettingsSections } from "@/runtime/extension/settings-page-view"
 import {
   type FollowUpBehavior,
+  type ModelGuard,
   type TerminalPlacement,
   type WorkspaceDefaultDestination,
   useSettings,
@@ -217,6 +218,50 @@ const TabLayoutSetting = () => {
   )
 }
 
+const ModelCostSection = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  const options = createMemo((): { value: ModelGuard["paidVisibility"]; label: string }[] => [
+    { value: "warn", label: language.t("settings.modelGuard.row.paidVisibility.warn") },
+    { value: "hide", label: language.t("settings.modelGuard.row.paidVisibility.hide") },
+  ])
+
+  return (
+    <section class="settings-section" aria-label={language.t("settings.modelGuard.section.title")}>
+      <h3 class="settings-section-title">{language.t("settings.modelGuard.section.title")}</h3>
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.modelGuard.row.paidVisibility.title")}
+          description={language.t("settings.modelGuard.row.paidVisibility.description")}
+        >
+          <Select
+            data-action="settings-model-guard-paid-visibility"
+            options={options()}
+            current={options().find((option) => option.value === settings.modelGuard.paidVisibility())}
+            value={(option) => option.value}
+            label={(option) => option.label}
+            placement="bottom-end"
+            gutter={6}
+            onSelect={(option) => option && settings.modelGuard.setPaidVisibility(option.value)}
+          />
+        </SettingsRow>
+        <SettingsRow
+          title={language.t("settings.modelGuard.row.confirmPaidSwitch.title")}
+          description={language.t("settings.modelGuard.row.confirmPaidSwitch.description")}
+        >
+          <div data-action="settings-model-guard-confirm-paid-switch">
+            <Switch
+              checked={settings.modelGuard.confirmPaidSwitch()}
+              onChange={(checked) => settings.modelGuard.setConfirmPaidSwitch(checked)}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsList>
+    </section>
+  )
+}
+
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -307,6 +352,8 @@ export const SettingsGeneral: Component = () => {
       </div>
       <div class="settings-tab-body settings-tab-body--sectioned">
         <GeneralSection />
+
+        <ModelCostSection />
 
         <section class="settings-section" aria-label={language.t("settings.timeline.title")}>
           <h3 class="settings-section-title">{language.t("settings.timeline.title")}</h3>

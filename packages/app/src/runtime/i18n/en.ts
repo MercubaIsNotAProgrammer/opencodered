@@ -116,6 +116,7 @@ export const dict = {
   "dialog.model.manage.description": "Customize which models appear in the model selector.",
   "dialog.model.chatgptPlan": "Using ChatGPT plan",
   "dialog.model.chatgptManageUsage": "Manage usage",
+  "dialog.model.paidOnly": "Free models only",
 
   "dialog.model.unpaid.freeModels.title": "Free models provided by OpenCode",
   "dialog.model.unpaid.addMore.title": "Add more models from popular providers",
@@ -256,6 +257,9 @@ export const dict = {
 
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
+  "model.tag.paid": "Paid",
+  "model.tag.armed": "Click again to confirm",
+  "model.cost.label": "Cost",
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
@@ -846,6 +850,15 @@ export const dict = {
   "settings.general.row.followUpBehavior.steer": "Steer",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
+  "settings.modelGuard.section.title": "Model costs",
+  "settings.modelGuard.row.paidVisibility.title": "Paid models",
+  "settings.modelGuard.row.paidVisibility.description":
+    "Choose whether models that cost money per token appear in the selector with a red warning and their price, or are hidden entirely.",
+  "settings.modelGuard.row.paidVisibility.warn": "Warn",
+  "settings.modelGuard.row.paidVisibility.hide": "Hide",
+  "settings.modelGuard.row.confirmPaidSwitch.title": "Confirm paid switch",
+  "settings.modelGuard.row.confirmPaidSwitch.description":
+    "Require a second click before a paid model becomes active, so a stray click can never start a billed session.",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",

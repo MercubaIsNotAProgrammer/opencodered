@@ -1,5 +1,6 @@
 import { Show, type Component, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { formatModelCost } from "./cost"
 
 type InputKey = "text" | "image" | "audio" | "video" | "pdf"
 
@@ -10,6 +11,11 @@ type ModelInfo = {
   name: string
   provider: {
     name: string
+  }
+  cost?: {
+    input: number
+    output: number
+    cache?: { read?: number; write?: number }
   }
   capabilities?: {
     reasoning: boolean
@@ -121,6 +127,9 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
   const context = () => language.t("model.tooltip.context", { limit: props.model.limit.context.toLocaleString() })
   const contextLimit = () => props.model.limit.context.toLocaleString(language.intl())
 
+  // A paid model reports its price here so the cost is visible before the row's warning label.
+  const cost = () => formatModelCost({ provider: { id: "" }, cost: props.model.cost })
+
   if (props.v2) {
     return (
       <div class="flex w-[180px] flex-col gap-2">
@@ -131,6 +140,14 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
         </Show>
         <ModelTooltipRow name={language.t("model.tooltip.reasoning")} value={reasoning()} />
         <ModelTooltipRow name={language.t("model.tooltip.context.label")} value={contextLimit()} />
+        <Show when={cost()}>
+          {(value) => (
+            <div class="flex min-w-0 items-center gap-4">
+              <span class="shrink-0 text-v2-text-text-muted">{language.t("model.cost.label")}</span>
+              <span class="ml-auto min-w-0 text-right font-[530] text-[#ff3b30]">{value()}</span>
+            </div>
+          )}
+        </Show>
       </div>
     )
   }
@@ -147,6 +164,7 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
       </Show>
       <div class="text-12-regular text-text-invert-base">{reasoning()}</div>
       <div class="text-12-regular text-text-invert-base">{context()}</div>
+      <Show when={cost()}>{(value) => <div class="text-12-regular text-[#ff3b30]">{value()}</div>}</Show>
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useIntegrations } from "@/providers/catalog/integrations"
 import { decode64 } from "@/runtime/persistence/base64"
 import { useLanguage } from "@/runtime/i18n/language"
+import { isFreeModel } from "./cost"
 import { ModelTooltip } from "./tooltip"
 
 type ModelState = ModelSelection
@@ -34,8 +35,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
     return c ? `${c.provider.id}:${c.id}` : undefined
   })
 
-  const isFree = (item: ReturnType<ModelState["list"]>[number]) =>
-    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
+  const isFree = (item: ReturnType<ModelState["list"]>[number]) => isFreeModel(item)
 
   const providerName = (provider: { id: string; name: string }) =>
     provider.id === "opencode" ? language.t("provider.connect.opencode.name") : provider.name
