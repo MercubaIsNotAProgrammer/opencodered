@@ -92,7 +92,15 @@ const ModelList: Component<{
     on(
       () => props.open,
       (open) => {
-        if (!props.mobile || !open) return
+        if (!props.mobile) return
+
+        // Closing clears any arm so a reopened picker never starts out half-confirmed.
+        if (!open) {
+          controller.disarm()
+
+          return
+        }
+
         setStore({ search: "", active: controller.current() ?? "" })
       },
     ),
@@ -132,7 +140,16 @@ const ModelList: Component<{
   const selectActive = () => {
     const item = visibleModels().find((item) => modelKey(item) === store.active)
 
-    if (item) controller.select(item)
+    if (item) activate(item)
+  }
+
+  // Arms a paid model instead of switching, so the list stays open for the confirming click.
+  const activate = (item: ModelItem) => {
+    if (!controller.attempt(item)) return
+
+    controller.select(item)
+
+    props.onSelect()
   }
 
   function ModelRows(props: { items: ModelItem[]; mobile?: boolean }) {
@@ -159,7 +176,7 @@ const ModelList: Component<{
                 }}
                 onMouseEnter={() => setStore("active", modelKey(item))}
                 onMouseLeave={() => setStore("active", "")}
-                onClick={() => controller.select(item)}
+                onClick={() => activate(item)}
               >
                 <div data-slot="settings-row-copy">
                   <div data-slot="settings-row-title" class="flex items-center gap-2">
@@ -324,6 +341,7 @@ export function ModelSelectorPopover(props: {
           current={controller.current()}
           chatgptPlan={chatgptPlan()}
           select={controller.select}
+          attempt={controller.attempt}
           armed={controller.armed}
           disarm={controller.disarm}
           onManage={manage}
@@ -519,9 +537,13 @@ function createModelSelectorController(input: {
 
       return value ? modelKey(value) : undefined
     },
+    /**
+     * Arms a paid model and reports whether the caller's selection may proceed.
+     * Callers must consult this before dismissing the dialog, otherwise the first
+     * click would close the picker while only arming the model.
+     */
+    attempt: (item: ModelItem) => armed.guard(modelKey(item), !isFree(item)),
     select: (item: ModelItem) => {
-      // A paid model is armed by the first click; only the second one within the window switches.
-      if (!armed.guard(modelKey(item), !isFree(item))) return
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
       input.onSelect()
     },
@@ -536,6 +558,7 @@ export function ModelSelectorPopoverView(props: {
   current: string | undefined
   chatgptPlan?: boolean
   select: (item: ModelItem) => void
+  attempt: (item: ModelItem) => boolean
   armed: () => string | undefined
   disarm: () => void
   onManage: () => void
@@ -593,9 +616,14 @@ export function ModelSelectorPopoverView(props: {
     }
 
     setStore({ open: false, search: "", active: "" })
+    // Closing clears any arm so a reopened picker never starts out half-confirmed.
+    props.disarm()
   }
 
   const selectModel = (item: ModelItem) => {
+    // A paid model arms on the first click; keep the menu open so the second one can confirm.
+    if (!props.attempt(item)) return
+
     dismiss.preventTriggerRestore()
     setOpen(false)
     props.disarm()

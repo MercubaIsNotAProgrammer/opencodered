@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, onCleanup } from "solid-js"
 import { useLocal } from "../context/local"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -21,6 +21,8 @@ export function DialogModel(props: { providerID?: string }) {
   const [query, setQuery] = createSignal("")
   const favoritePriority = new Set(local.model.favorite().map(modelPreferenceKey))
   const switchGuard = ModelCost.createSwitchGuard(config)
+  // Closing the dialog clears any arm so a reopened picker never starts half-confirmed.
+  onCleanup(() => switchGuard.disarm())
 
   const connected = useConnected()
   const providers = createMemo(

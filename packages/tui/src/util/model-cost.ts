@@ -1,5 +1,6 @@
 export * as ModelCost from "./model-cost"
 
+import { createSignal } from "solid-js"
 import type { Config } from "../config"
 
 type ModelInfo = {
@@ -60,7 +61,7 @@ export function label(model: ModelInfo, config: Config.Resolved) {
 
 /** The extra line shown under an armed paid model awaiting its confirming Enter. */
 export function armedLabel() {
-  return "Press enter again to switch to this paid model"
+  return "ENTER again to confirm paid"
 }
 
 /**
@@ -68,13 +69,14 @@ export function armedLabel() {
  * model that is not armed yet arms itself and reports false.
  */
 export function createSwitchGuard(config: Config.Resolved, window = 4000) {
-  let armed: string | undefined
+  // A signal, not a plain variable: the option footers are a memo and must re-render on arm.
+  const [armed, setArmed] = createSignal<string>()
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const disarm = () => {
     if (timer) clearTimeout(timer)
     timer = undefined
-    armed = undefined
+    setArmed(undefined)
   }
 
   const guard = (key: string, paid: boolean) => {
@@ -84,21 +86,21 @@ export function createSwitchGuard(config: Config.Resolved, window = 4000) {
       return true
     }
 
-    if (armed === key) {
+    if (armed() === key) {
       disarm()
 
       return true
     }
 
     if (timer) clearTimeout(timer)
-    armed = key
+    setArmed(key)
     timer = setTimeout(disarm, window)
 
     return false
   }
 
   return {
-    armed: () => armed,
+    armed,
     guard,
     disarm,
   }

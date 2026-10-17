@@ -120,4 +120,20 @@ describe("createSwitchGuard", () => {
     await Bun.sleep(30)
     expect(guard.armed()).toBeUndefined()
   })
+
+  test("arms a label so a memo re-renders while armed", () => {
+    const guard = ModelCost.createSwitchGuard(config())
+    const seen: Array<string | undefined> = []
+
+    // Reads the signal the way the option footer memo does.
+    const read = () => seen.push(guard.armed())
+
+    read()
+    guard.guard("paid", true)
+    read()
+    guard.guard("paid", true)
+    read()
+
+    expect(seen).toEqual([undefined, "paid", undefined])
+  })
 })
